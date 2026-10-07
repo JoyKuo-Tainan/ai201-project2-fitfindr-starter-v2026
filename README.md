@@ -41,6 +41,15 @@
 
 <!-- Three or four sentences: what a user asks for, and what they get back. -->
 
+FitFindr is a thrift-shopping agent. The user describes what they want in
+plain words, optionally with a size and a budget, for example `python app.py
+ask 'vintage graphic tee under $30 size M'`. It searches the secondhand
+listings for the best match within that size and budget, then suggests one or
+two outfits built around it, using pieces from the user's own wardrobe when
+it has them. Finally it writes a short social-media "fit card" caption naming
+the item, its price, and where to buy it. If nothing matches, it stops before
+the outfit step and tells the user what to change in their search, but it
+never suggests going over budget.
 
 
 ---
@@ -59,15 +68,10 @@
 
 ### `search_listings`
 
-### `search_listings`
-
 - **What it does:** Searches the thrift listings for items whose title, description, category, style tags, colors, or brand share keywords with the description. Title matches count double. It filters by size and maximum price when those are given.
 - **Inputs:** `description` (str): keywords such as "vintage graphic tee"; `size` (str | None): matched case-insensitively against each part of a slash-separated size, so "M" matches "S/M" but "S" does not match "US 9", and "One Size" matches any size; None skips the size filter; `max_price` (float | None): an inclusive price ceiling; None skips the price filter.
 - **Returns:** A list of up to `config.SEARCH_RESULT_LIMIT` listing dicts, highest keyword score first. Each dict has `id`, `title`, `description`, `category`, `style_tags` (list), `size`, `condition`, `price` (float), `colors` (list), `brand` (str or None), and `platform`.
 - **When it has nothing:** Returns an empty list `[]`, not None and not an exception. This happens when no listing passes the filters or none shares a keyword with the description. The loop branches on this and stops with a "no matches" message.
-
-
-### `suggest_outfit`
 
 ### `suggest_outfit`
 
@@ -75,9 +79,6 @@
 - **Inputs:** `new_item` (dict): a listing dict from `search_listings`, using its title, category, colors, style_tags, size, condition, description, and brand if there is one; `wardrobe` (dict): has an `items` key holding a list of wardrobe item dicts (`id`, `name`, `category`, `colors`, `style_tags`, `notes`), following `data/wardrobe_schema.json`. The list may be empty.
 - **Returns:** A non-empty string with one or two outfit suggestions, a short paragraph each, saying which pieces to wear together and why the combination works.
 - **When it has nothing:** If `wardrobe['items']` is empty (or the wardrobe is None), it still returns a non-empty string of general styling advice using common pieces, never "" and never an exception. If the model returns an empty response, it returns a short fallback suggestion instead.
-
-
-### `create_fit_card`
 
 ### `create_fit_card`
 
