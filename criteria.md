@@ -28,6 +28,12 @@ tool calls and returns a fit card — in at least 4 of 5 tries.
 <!-- Why 4 of 5 and not 5 of 5? Something about your search, probably —
      "my search is a plain keyword match and some phrasings will miss" is a
      real answer. -->
+`search_listings` is a plain keyword-overlap score over 40 listings, and
+`parse_query` is a regex. A phrasing the regex doesn't know ("nothing over
+thirty dollars") or words that aren't in any title/tag ("retro" when the data
+says "vintage") can miss a listing that really is there. Requiring 5 of 5 would
+be grading the thesaurus, not the loop; 4 of 5 still fails if more than one
+ordinary phrasing breaks.
 
 ---
 
@@ -39,6 +45,10 @@ Given a query that matches no listings, the agent stops before calling
 **Why this target:**
 <!-- Why is 5 of 5 reasonable here when criterion 1 isn't? What's different
      about this path? -->
+This path never touches the model. `parse_query`, `search_listings` and the
+`if not results:` branch are all deterministic, so the same query gives the same
+empty list every time — there is no randomness to forgive. One miss would mean
+the branch itself is wrong, not that the model had a bad day.
 
 ---
 
@@ -54,10 +64,17 @@ Given a query that matches no listings, the agent stops before calling
      compares session["selected_item"] against what actually reached
      suggest_outfit is the shape you're after. -->
 
-
+For a matching query, the listing `id` in `session["selected_item"]` equals
+`session["search_results"][0]["id"]`, **and** equals the `id` of the item
+recorded as the input to both `suggest_outfit` and `create_fit_card` in the
+trace — 5 of 5 tries, checked by comparing the ids, not by reading the captions.
 
 **Why this target:**
-
+The hand-off from search to the next two tools is plain Python reading one key
+out of the session dict — no model, no parsing — so there's no legitimate reason
+for it ever to differ. Comparing `id`s (not titles) matters because several
+listings share similar titles, and a caption about "a vintage tee" would look
+fine even if it was the wrong tee.
 
 
 ---
@@ -75,10 +92,19 @@ Given a query that matches no listings, the agent stops before calling
      sentence? A card longer than a caption anyone would post? Any of those can
      be turned into a number. -->
 
-
+Across 5 runs on 5 different matching items, at least 4 of the 5 fit cards:
+(a) contain the item's exact price (e.g. `$24`) and its platform name,
+(b) are 2–4 sentences and under 70 words, and
+(c) no two of the 5 cards start with the same first sentence.
 
 **Why this target:**
-
+The card comes from the model at `TEMPERATURE = 0.9`, so the wording will drift
+and it will sometimes round a price or drop the platform even when the prompt
+asks for both — 4 of 5 allows one slip without letting that become the norm.
+Price and platform are the two facts a reader would actually act on, and both
+are string-checkable against the listing dict. The 70-word cap is "something
+you'd post"; the distinct-opening rule catches a template-y prompt (or a stale
+cache) that produces the same card for different items.
 
 
 ---
@@ -92,11 +118,30 @@ Given a query that matches no listings, the agent stops before calling
      search respects a price ceiling — anything, as long as it names a number
      or an observable outcome. -->
 
+### Search respects a price ceiling and a size match
 
+Across 5 queries that each state both a price ceiling and a size (e.g.
+"vintage tee under $30 size M", "jeans under $40 in W30", "boots size US 8
+under $60"), **5 of 5:** every listing in `session["search_results"]`:
+(a) has `price <= ` the stated ceiling (inclusive, so a `$30.00` item passes
+    "under $30"), and
+(b) matches the stated size — the listing's size string, split on `/` with
+    parentheticals dropped, contains the wanted size (so "M" matches `M`,
+    `S/M` and `M/L`), or is a `One Size` listing.
+
+And at least 1 of the 5 queries must return a non-empty list, so the check
+can't pass by returning nothing.
 
 **Why this target:**
-
-
+The filter is deterministic Python: `max_price` is a plain `>` comparison and
+`_size_matches` is set overlap on tokens. Same query, same results, every time
+— so one over-budget or wrong-size listing means the filter is broken, not
+unlucky, and 5 of 5 is the only fair bar. The size rule is spelled out because
+the data mixes formats (`S/M`, `US 8.5`, `W30 L30`, `XL (oversized)`), and
+"matches" has to mean something I can check by hand against the listing dict.
+`W30 L30` is the case I expect to be a real test: it isn't split on `/`, so a
+"W30" query may not match it. The non-empty rule rules out the cheap pass,
+where an over-strict filter returns `[]` and trivially "respects" everything.
 
 ---
 
